@@ -1,0 +1,12 @@
+[server]
+addr = ':8080'
+read_timeout = 10000000000
+write_timeout = 10000000000
+
+[database]
+dsn = 'data/counter.db'
+
+[counter]
+site_key = 'dtc_site'
+allowed_origins = ['example.com']
+enable_cors = false

@@ -1,0 +1,6 @@
+build/
+release/
+/data/
+*.db
+.DS_Store
+.worktrees/

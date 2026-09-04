@@ -1,0 +1,7 @@
+.git
+.github
+.worktrees
+build
+release
+data
+*.db
