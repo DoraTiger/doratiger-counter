@@ -70,7 +70,7 @@ func (r *CounterRepo) loadFromDB() error {
 	}
 
 	rows, err := r.db.QueryContext(context.Background(),
-		`SELECT page_key, page_count FROM page_stats`)
+		`SELECT page_key, page_count FROM page_stats WHERE site_key = ?`, r.siteKey)
 	if err != nil {
 		return fmt.Errorf("load page PV: %w", err)
 	}
@@ -109,7 +109,7 @@ func (r *CounterRepo) loadFromDB() error {
 	_ = siteRows.Close()
 
 	pageRows, err := r.db.QueryContext(context.Background(),
-		`SELECT page_key, visitor_hash FROM page_visitors`)
+		`SELECT page_key, visitor_hash FROM page_visitors WHERE site_key = ?`, r.siteKey)
 	if err != nil {
 		return fmt.Errorf("load page visitors: %w", err)
 	}
@@ -214,9 +214,9 @@ func (r *CounterRepo) flush() error {
 	}
 
 	for key, count := range pagePV {
-		if _, err := tx.Exec(`INSERT INTO page_stats (page_key, page_count) VALUES (?, ?)
-			ON CONFLICT(page_key) DO UPDATE SET page_count = ?`,
-			key, count, count); err != nil {
+		if _, err := tx.Exec(`INSERT INTO page_stats (site_key, page_key, page_count) VALUES (?, ?, ?)
+			ON CONFLICT(site_key, page_key) DO UPDATE SET page_count = ?`,
+			r.siteKey, key, count, count); err != nil {
 			return fmt.Errorf("flush page PV %q: %w", key, err)
 		}
 	}
@@ -228,8 +228,8 @@ func (r *CounterRepo) flush() error {
 	}
 	for pageKey, visitors := range pageVisitors {
 		for _, visitorHash := range visitors {
-			if _, err := tx.Exec(`INSERT OR IGNORE INTO page_visitors (page_key, visitor_hash) VALUES (?, ?)`,
-				pageKey, visitorHash); err != nil {
+			if _, err := tx.Exec(`INSERT OR IGNORE INTO page_visitors (site_key, page_key, visitor_hash) VALUES (?, ?, ?)`,
+				r.siteKey, pageKey, visitorHash); err != nil {
 				return fmt.Errorf("flush page visitor %q: %w", pageKey, err)
 			}
 		}

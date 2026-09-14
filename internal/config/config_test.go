@@ -40,3 +40,35 @@ func TestIsOriginAllowedWithoutAllowlist(t *testing.T) {
 		t.Fatal("empty allowlist should allow requests without an Origin header")
 	}
 }
+
+func TestResolveSiteKeyMapsConfiguredHostsWithoutDefaultFallback(t *testing.T) {
+	t.Parallel()
+
+	cfg := &CounterConfig{
+		SiteKey: "dtc_site",
+		Sites: map[string]string{
+			"www.superheaoz.top": "dtc_site",
+			"www.doratiger.top":  "doratiger_site",
+		},
+	}
+	tests := []struct {
+		name   string
+		source string
+		want   string
+		ok     bool
+	}{
+		{name: "superheaoz", source: "https://www.superheaoz.top", want: "dtc_site", ok: true},
+		{name: "doratiger", source: "https://www.doratiger.top", want: "doratiger_site", ok: true},
+		{name: "unconfigured host", source: "https://www.evil.test", ok: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, ok := cfg.ResolveSiteKey(tt.source)
+			if ok != tt.ok || got != tt.want {
+				t.Fatalf("ResolveSiteKey(%q) = (%q, %v), want (%q, %v)", tt.source, got, ok, tt.want, tt.ok)
+			}
+		})
+	}
+}

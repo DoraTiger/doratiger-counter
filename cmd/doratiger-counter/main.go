@@ -65,16 +65,30 @@ func runServer(parent context.Context, cfg *config.Config) (runErr error) {
 	}
 	defer func() { runErr = errors.Join(runErr, db.Close()) }()
 
-	if err := data.Migrate(db); err != nil {
+	if err := data.MigrateForSite(db, cfg.Counter.SiteKey); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
 
-	repo, err := data.NewCounterRepo(db, cfg.Counter.SiteKey)
-	if err != nil {
-		return fmt.Errorf("load counters: %w", err)
+	siteKeys := map[string]struct{}{cfg.Counter.SiteKey: {}}
+	for _, siteKey := range cfg.Counter.Sites {
+		if siteKey != "" {
+			siteKeys[siteKey] = struct{}{}
+		}
 	}
-	defer func() { runErr = errors.Join(runErr, repo.Stop()) }()
-	counterHandler := handler.NewCounterHandler(repo, &cfg.Counter)
+	repos := make(map[string]*data.CounterRepo, len(siteKeys))
+	for siteKey := range siteKeys {
+		repo, err := data.NewCounterRepo(db, siteKey)
+		if err != nil {
+			return fmt.Errorf("load counters for %q: %w", siteKey, err)
+		}
+		repos[siteKey] = repo
+	}
+	defer func() {
+		for _, repo := range repos {
+			runErr = errors.Join(runErr, repo.Stop())
+		}
+	}()
+	counterHandler := handler.NewCounterHandler(repos, &cfg.Counter)
 	httpServer := &http.Server{
 		Addr:         cfg.Server.Addr,
 		Handler:      appserver.New(counterHandler, cfg),

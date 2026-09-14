@@ -2,6 +2,18 @@
 
 本项目遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 新增
+
+- 基于来源主机名的多站点映射；不同站点的相同页面路径分别计数。
+- SQLite schema v2，将旧版页面 PV 与页面访客摘要迁入配置的历史站点键。
+
+### 兼容性
+
+- `/count` 的请求参数与四字段响应保持不变。
+- 未配置 `counter.sites` 时保留原有单站点 `site_key` 与 `allowed_origins` 行为。
+
 ## [0.1.0] - 待发布
 
 ### 新增

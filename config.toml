@@ -8,5 +8,6 @@ dsn = 'data/counter.db'
 
 [counter]
 site_key = 'dtc_site'
+# 单站点兼容模式；如需多站点，请改用 sites 映射。
 allowed_origins = ['example.com']
 enable_cors = false

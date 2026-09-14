@@ -27,9 +27,10 @@ type DatabaseConfig struct {
 }
 
 type CounterConfig struct {
-	SiteKey        string   `toml:"site_key"`
-	AllowedOrigins []string `toml:"allowed_origins"` // 允许的域名列表
-	EnableCors     bool     `toml:"enable_cors"`
+	SiteKey        string            `toml:"site_key"`
+	Sites          map[string]string `toml:"sites"`
+	AllowedOrigins []string          `toml:"allowed_origins"` // 允许的域名列表
+	EnableCors     bool              `toml:"enable_cors"`
 }
 
 func DefaultConfig() *Config {
@@ -110,25 +111,41 @@ func WriteConfig(path string, cfg *Config) error {
 
 // HasOrigins 是否配置了域名白名单
 func (c *CounterConfig) HasOrigins() bool {
-	return len(c.AllowedOrigins) > 0
+	return len(c.Sites) > 0 || len(c.AllowedOrigins) > 0
 }
 
 // IsOriginAllowed 检查 origin 是否在白名单中
 func (c *CounterConfig) IsOriginAllowed(origin string) bool {
-	if !c.HasOrigins() {
-		return true // 未配置白名单，放行所有
+	_, ok := c.ResolveSiteKey(origin)
+	return ok
+}
+
+// ResolveSiteKey 根据来源主机名返回其对应的站点键。
+// 配置 sites 后只接受显式映射的主机；未配置 sites 时保留旧版单站点行为。
+func (c *CounterConfig) ResolveSiteKey(origin string) (string, bool) {
+	if len(c.Sites) == 0 && len(c.AllowedOrigins) == 0 {
+		return c.SiteKey, true
 	}
 	host, ok := originHostname(origin)
 	if !ok {
-		return false
+		return "", false
+	}
+	if len(c.Sites) > 0 {
+		for configuredHost, siteKey := range c.Sites {
+			siteHost, valid := configuredHostname(configuredHost)
+			if valid && siteKey != "" && strings.EqualFold(host, siteHost) {
+				return siteKey, true
+			}
+		}
+		return "", false
 	}
 	for _, allowed := range c.AllowedOrigins {
 		allowedHost, ok := configuredHostname(allowed)
 		if ok && strings.EqualFold(host, allowedHost) {
-			return true
+			return c.SiteKey, true
 		}
 	}
-	return false
+	return "", false
 }
 
 func originHostname(raw string) (string, bool) {

@@ -16,8 +16,10 @@ BUILD_FLAGS := -mod=readonly -trimpath
 CGO_ENABLED ?= 0
 BUILD_DIR := build
 RELEASE_DIR := release
+CONTAINER_IMAGE ?= $(NAME):local
+CONTAINER_PLATFORM ?= linux/amd64
 
-.PHONY: all build build-all check clean fmt-check release test vet
+.PHONY: all build build-all check clean container-build fmt-check release test vet
 
 all: check build
 
@@ -28,6 +30,9 @@ build:
 build-all: clean
 	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build $(BUILD_FLAGS) -ldflags "$(LD_FLAGS)" -o $(BUILD_DIR)/linux-amd64/$(NAME) $(MAIN_ENTRY)
 	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build $(BUILD_FLAGS) -ldflags "$(LD_FLAGS)" -o $(BUILD_DIR)/linux-arm64/$(NAME) $(MAIN_ENTRY)
+
+container-build: build-all
+	docker build --platform $(CONTAINER_PLATFORM) -t $(CONTAINER_IMAGE) .
 
 clean:
 	rm -rf $(BUILD_DIR) $(RELEASE_DIR)

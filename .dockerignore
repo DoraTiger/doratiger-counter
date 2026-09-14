@@ -1,7 +1,11 @@
 .git
 .github
 .worktrees
-build
+build/*
+!build/linux-amd64/
+!build/linux-amd64/doratiger-counter
+!build/linux-arm64/
+!build/linux-arm64/doratiger-counter
 release
 data
 *.db

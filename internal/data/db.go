@@ -36,7 +36,15 @@ func OpenSQLite(path string) (*sql.DB, error) {
 }
 
 func Migrate(db *sql.DB) error {
-	const currentSchemaVersion = 1
+	return MigrateForSite(db, "dtc_site")
+}
+
+// MigrateForSite upgrades the database and assigns pre-v2 page state to legacySiteKey.
+func MigrateForSite(db *sql.DB, legacySiteKey string) error {
+	const currentSchemaVersion = 2
+	if legacySiteKey == "" {
+		return fmt.Errorf("legacy site key is required")
+	}
 	tx, err := db.BeginTx(context.Background(), nil)
 	if err != nil {
 		return fmt.Errorf("begin migration: %w", err)
@@ -50,11 +58,8 @@ func Migrate(db *sql.DB) error {
 	if version > currentSchemaVersion {
 		return fmt.Errorf("database schema version %d is newer than supported version %d", version, currentSchemaVersion)
 	}
-	if version == currentSchemaVersion {
-		return tx.Commit()
-	}
-
-	const schema = `
+	if version < 1 {
+		const schemaV1 = `
 		CREATE TABLE IF NOT EXISTS page_stats (
 			page_key TEXT PRIMARY KEY,
 			page_count INTEGER NOT NULL DEFAULT 0
@@ -73,11 +78,44 @@ func Migrate(db *sql.DB) error {
 			visitor_hash TEXT NOT NULL,
 			PRIMARY KEY (page_key, visitor_hash)
 		);`
-	if _, err := tx.ExecContext(context.Background(), schema); err != nil {
-		return fmt.Errorf("apply schema version 1: %w", err)
+		if _, err := tx.ExecContext(context.Background(), schemaV1); err != nil {
+			return fmt.Errorf("apply schema version 1: %w", err)
+		}
+		if _, err := tx.Exec(`PRAGMA user_version = 1`); err != nil {
+			return fmt.Errorf("record schema version 1: %w", err)
+		}
+		version = 1
 	}
-	if _, err := tx.Exec(`PRAGMA user_version = 1`); err != nil {
-		return fmt.Errorf("record schema version 1: %w", err)
+
+	if version < 2 {
+		const schemaV2 = `
+			CREATE TABLE page_stats_v2 (
+				site_key TEXT NOT NULL,
+				page_key TEXT NOT NULL,
+				page_count INTEGER NOT NULL DEFAULT 0,
+				PRIMARY KEY (site_key, page_key)
+			);
+			INSERT INTO page_stats_v2 (site_key, page_key, page_count)
+				SELECT ?, page_key, page_count FROM page_stats;
+			DROP TABLE page_stats;
+			ALTER TABLE page_stats_v2 RENAME TO page_stats;
+
+			CREATE TABLE page_visitors_v2 (
+				site_key TEXT NOT NULL,
+				page_key TEXT NOT NULL,
+				visitor_hash TEXT NOT NULL,
+				PRIMARY KEY (site_key, page_key, visitor_hash)
+			);
+			INSERT INTO page_visitors_v2 (site_key, page_key, visitor_hash)
+				SELECT ?, page_key, visitor_hash FROM page_visitors;
+			DROP TABLE page_visitors;
+			ALTER TABLE page_visitors_v2 RENAME TO page_visitors;`
+		if _, err := tx.ExecContext(context.Background(), schemaV2, legacySiteKey, legacySiteKey); err != nil {
+			return fmt.Errorf("apply schema version 2: %w", err)
+		}
+		if _, err := tx.Exec(`PRAGMA user_version = 2`); err != nil {
+			return fmt.Errorf("record schema version 2: %w", err)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration: %w", err)
